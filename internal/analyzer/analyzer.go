@@ -1,57 +1,29 @@
 package analyzer
 
-import (
-	"path/filepath"
-	"os"
+import "fmt"
 
-	"github.com/abhinavdevarakonda/maplet/internal/graph"
-)
+func Analyze(root string) Result {
+	// Phase 1: FS Scan (Discovery)
+	scan, err := Scan(root)
+	if err != nil {
+		panic(fmt.Sprintf("failed to scan directory: %v", err))
+	}
 
-func Analyze(root string) *graph.Graph {
-	g := graph.New()
+	// Phase 2: Symbols (Definitions)
+	// For now, we only have the Go extractor. 
+	// Later we can dispatch based on file extensions.
+	goExt := &GoExtractor{}
+	symbols, err := goExt.ExtractSymbols(scan.Files)
+	if err != nil {
+		panic(fmt.Sprintf("failed to extract symbols: %v", err))
+	}
 
-	filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
+	// Phase 3: Facts (Interactions)
+	facts, err := goExt.ExtractFacts(scan.Files)
+	if err != nil {
+		panic(fmt.Sprintf("failed to extract facts: %v", err))
+	}
 
-		if info.IsDir() {
-			name := info.Name()
-			if name == ".git" || name == "node_modules" {
-				return filepath.SkipDir
-			}
-
-			g.AddNode(&graph.Node{
-				ID: p,
-				Type: graph.DirectoryNode,
-				Name: info.Name(),
-				Path: p,
-			})
-
-			if p != root {
-				parent := filepath.Dir(p)
-				g.AddEdge(parent, p, graph.ContainsEdge)
-			}
-
-			return nil
-		}
-
-		if filepath.Ext(info.Name()) != ".go" {
-			return nil
-		}
-
-		g.AddNode(&graph.Node{
-			ID:		p,
-			Type:	graph.FileNode,
-			Name:	info.Name(),
-			Path:	p,
-		})
-
-		parent := filepath.Dir(p)
-		g.AddEdge(parent, p, graph.ContainsEdge)
-
-		return nil
-	})
-
-	return g
+	// Phase 4: Graphs (Synthesis)
+	return Build(scan, symbols, facts)
 }

@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <title>Maplet</title>
 
-  <!-- Cytoscape CDN -->
   <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
 
   <style>
@@ -13,84 +12,143 @@
       font-family: sans-serif;
     }
 
+    #toolbar {
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+      background: #f7f7f7;
+    }
+
     #cy {
       width: 100vw;
-      height: 100vh;
+      height: calc(100vh - 40px);
+    }
+
+    button {
+      margin-right: 8px;
     }
   </style>
 </head>
 <body>
 
+  <div id="toolbar">
+    <button id="structureBtn">Structure View</button>
+    <button id="callBtn">Call View</button>
+  </div>
+
   <div id="cy"></div>
 
   <script>
+    let graphData = null;
+    let cy = null;
+
     fetch("/api/graph")
       .then(res => res.json())
-      .then(graph => {
-
-        const elements = [];
-
-        // Nodes
-        for (const n of graph.nodes) {
-          elements.push({
-            data: {
-              id: n.id,
-              label: n.name,
-              type: n.type
-            }
-          });
-        }
-
-        // Edges
-        for (const e of graph.edges) {
-          elements.push({
-            data: {
-              source: e.from,
-              target: e.to,
-              type: e.type
-            }
-          });
-        }
-
-        cytoscape({
-          container: document.getElementById("cy"),
-
-          elements: elements,
-
-          style: [
-            {
-              selector: "node",
-              style: {
-                "label": "data(label)",
-                "font-size": 10,
-                "background-color": "#666",
-                "text-valign": "center",
-                "text-halign": "center",
-                "color": "#000"
-              }
-            },
-            {
-              selector: "edge",
-              style: {
-                "width": 1,
-                "line-color": "#999",
-                "target-arrow-color": "#999",
-                "target-arrow-shape": "triangle"
-              }
-            }
-          ],
-
-          layout: {
-            name: "breadthfirst",
-            directed: true,
-            padding: 20
-          }
-        });
-
+      .then(data => {
+        graphData = data;
+        renderStructure();
       })
       .catch(err => {
         console.error("Failed to load graph:", err);
       });
+
+    document.getElementById("structureBtn").onclick = renderStructure;
+    document.getElementById("callBtn").onclick = renderCall;
+
+    function renderStructure() {
+      const elements = [];
+
+      for (const n of graphData.nodes) {
+        elements.push({
+          data: {
+            id: n.id,
+            label: n.name,
+            type: n.type
+          }
+        });
+      }
+
+      for (const e of graphData.edges) {
+        elements.push({
+          data: {
+            source: e.from,
+            target: e.to,
+            type: e.type
+          }
+        });
+      }
+
+      draw(elements, "breadthfirst");
+    }
+
+    function renderCall() {
+      const elements = [];
+      const seen = new Set();
+      const callEdges = graphData.callEdges || [];
+
+      for (const e of callEdges) {
+        if (!seen.has(e.from)) {
+          elements.push({
+            data: { id: e.from, label: e.from }
+          });
+          seen.add(e.from);
+        }
+
+        if (!seen.has(e.to)) {
+          elements.push({
+            data: { id: e.to, label: e.to }
+          });
+          seen.add(e.to);
+        }
+
+        elements.push({
+          data: {
+            source: e.from,
+            target: e.to
+          }
+        });
+      }
+
+      draw(elements, "cose");
+    }
+
+    function draw(elements, layoutName) {
+      if (cy) {
+        cy.destroy();
+      }
+
+      cy = cytoscape({
+        container: document.getElementById("cy"),
+        elements: elements,
+
+        style: [
+          {
+            selector: "node",
+            style: {
+              "label": "data(label)",
+              "font-size": 10,
+              "background-color": "#666",
+              "text-valign": "center",
+              "text-halign": "center",
+              "color": "#000"
+            }
+          },
+          {
+            selector: "edge",
+            style: {
+              "width": 1,
+              "line-color": "#999",
+              "target-arrow-color": "#999",
+              "target-arrow-shape": "triangle"
+            }
+          }
+        ],
+
+        layout: {
+          name: layoutName,
+          padding: 20
+        }
+      });
+    }
   </script>
 
 </body>

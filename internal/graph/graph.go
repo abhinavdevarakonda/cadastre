@@ -1,13 +1,37 @@
 package graph
 
+type NodeType string
+
+const (
+	DirectoryNode NodeType = "directory"
+	FileNode      NodeType = "file"
+	FunctionNode  NodeType = "function"
+)
+
+type Node struct {
+	ID   string
+	Type NodeType
+	Name string
+	Path string
+}
+
+type EdgeType string
+
+const ContainsEdge EdgeType = "contains"
+
+type Edge struct {
+	From string
+	To   string
+	Type EdgeType
+}
+
 type Graph struct {
-	// here, string is just the ID/Name key in Node struct from node.go
 	Nodes map[string]*Node
 	Edges []*Edge
 }
 
 func New() *Graph {
-	return &Graph {
+	return &Graph{
 		Nodes: make(map[string]*Node),
 		Edges: []*Edge{},
 	}
@@ -19,8 +43,8 @@ func (g *Graph) AddNode(n *Node) {
 
 func (g *Graph) AddEdge(from, to string, t EdgeType) {
 	g.Edges = append(g.Edges, &Edge{
-		From:	from,
-		To:		to,
-		Type:	t,
+		From: from,
+		To:   to,
+		Type: t,
 	})
 }

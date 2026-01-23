@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
-	"encoding/json"
 
 	"github.com/abhinavdevarakonda/maplet/internal/analyzer"
 	"github.com/abhinavdevarakonda/maplet/internal/export"
 	"github.com/abhinavdevarakonda/maplet/internal/server"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
@@ -15,6 +17,8 @@ func main() {
 		fmt.Println("Usage:")
 		fmt.Println("	maplet analyze <path>")
 		fmt.Println("	maplet export <path>")
+		fmt.Println("	maplet serve <path>")
+		fmt.Println("	maplet mcp <path>")
 		return
 	}
 
@@ -27,17 +31,24 @@ func main() {
 
 	switch command {
 	case "analyze":
-		g := analyzer.Analyze(path)
+		result := analyzer.Analyze(path)
 
 		fmt.Printf(
-			"graph built: %d nodes, %d edges\n",
-			len(g.Nodes),
-			len(g.Edges),
+			"structure graph: %d nodes, %d edges\n",
+			len(result.Structure.Nodes),
+			len(result.Structure.Edges),
+		)
+
+		fmt.Printf(
+			"call graph: %d functions\n",
+			len(result.Call.Edges),
 		)
 
 	case "export":
-		g := analyzer.Analyze(path)
-		eg := export.FromGraph(g)
+		result := analyzer.Analyze(path)
+
+		eg := export.FromGraph(result.Structure)
+		eg.CallEdges = export.FromCallGraph(result.Call)
 
 		data, err := json.MarshalIndent(eg, "", " ")
 		if err != nil {
@@ -46,15 +57,25 @@ func main() {
 		fmt.Println(string(data))
 
 	case "serve":
-		g := analyzer.Analyze(path)
-		eg := export.FromGraph(g)
+		result := analyzer.Analyze(path)
+
+		eg := export.FromGraph(result.Structure)
 
 		srv := server.New(eg)
-		if err := srv.Start("localhost:6767"); err != nil  {
+		if err := srv.Start("localhost:6767"); err != nil {
+			panic(err)
+		}
+
+	case "mcp":
+		result := analyzer.Analyze(path)
+		mcpSrv := server.NewMCPServer(result)
+		stdioSrv := mcpserver.NewStdioServer(mcpSrv)
+		if err := stdioSrv.Listen(context.Background(), os.Stdin, os.Stdout); err != nil {
 			panic(err)
 		}
 
 	default:
-		fmt.Println("uknown command:", os.Args[1])
+		fmt.Println("unknown command:", command)
 	}
 }
+
