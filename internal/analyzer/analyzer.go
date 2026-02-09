@@ -125,6 +125,7 @@ func Build(scan *ScanResult, symbols []types.Symbol, facts []types.Fact) Result 
 			Type: graph.FunctionNode,
 			Name: sym.Name,
 			Path: p,
+			Line: sym.StartLine,
 		})
 
 		g.AddEdge(p, sym.ID, graph.ContainsEdge)

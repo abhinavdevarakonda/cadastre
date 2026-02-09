@@ -13,6 +13,7 @@ type Node struct {
 	Type NodeType `json:"type"`
 	Name string   `json:"name"`
 	Path string   `json:"path"`
+	Line int	  `json:"line,omitempty"`
 }
 
 type EdgeType string

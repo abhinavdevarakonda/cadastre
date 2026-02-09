@@ -8,6 +8,7 @@ import (
 
 	"github.com/abhinavdevarakonda/maplet/internal/analyzer"
 	"github.com/abhinavdevarakonda/maplet/internal/server"
+	"github.com/abhinavdevarakonda/maplet/internal/tui"
 	_ "github.com/abhinavdevarakonda/maplet/internal/lang/golang"
 	_ "github.com/abhinavdevarakonda/maplet/internal/lang/c"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -20,6 +21,7 @@ func main() {
 		fmt.Println("	maplet export <path>")
 		fmt.Println("	maplet serve <path>")
 		fmt.Println("	maplet mcp <path>")
+		fmt.Println("	maplet nav <path>")
 		return
 	}
 
@@ -54,6 +56,12 @@ func main() {
 
 		srv := server.New(result.Graph)
 		if err := srv.Start("localhost:6767"); err != nil {
+			panic(err)
+		}
+	
+	case "nav", "navigate", "tui":
+		result := analyzer.Analyze(path)
+		if err := tui.Start(result.Graph); err != nil {
 			panic(err)
 		}
 
