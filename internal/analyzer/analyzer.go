@@ -16,9 +16,9 @@ type Result struct {
 }
 
 type ScanResult struct {
-	Root		string
-	Files		[]string
-	Directories	[]string
+	Root        string
+	Files       []string
+	Directories []string
 }
 
 func Analyze(root string) Result {
@@ -28,25 +28,25 @@ func Analyze(root string) Result {
 	}
 
 	langs := lang.All()
-	fmt.Println("registered languages:", len(langs))
+	// fmt.Println("registered languages:", len(langs))
 
 	var symbols []types.Symbol
 	var facts []types.Fact
 
 	for _, l := range langs {
 		files := filterByExtension(scan.Files, l.Extensions())
-		fmt.Println("language extensions:", l.Extensions(), "files:", len(files))
+		// fmt.Println("language extensions:", l.Extensions(), "files:", len(files))
 
 		extractedSymbols, _ := l.ExtractSymbols(files)
-		extractedFacts, _ := l.ExtractFacts(files) 
+		extractedFacts, _ := l.ExtractFacts(files)
 
-		fmt.Println("symbols:", len(extractedSymbols), "facts:", len(extractedFacts))
+		// fmt.Println("symbols:", len(extractedSymbols), "facts:", len(extractedFacts))
 
 		symbols = append(symbols, extractedSymbols...)
 		facts = append(facts, extractedFacts...)
 	}
 
-	fmt.Println("total symbols:", len(symbols), "total facts:", len(facts))
+	// fmt.Println("total symbols:", len(symbols), "total facts:", len(facts))
 	return Build(scan, symbols, facts)
 }
 
@@ -139,9 +139,10 @@ func Build(scan *ScanResult, symbols []types.Symbol, facts []types.Fact) Result 
 		}
 	}
 
+	g.BuildIndex()
+
 	return Result{Graph: g}
 }
-
 
 func findCaller(f types.Fact, symbols []types.Symbol) string {
 	for _, sym := range symbols {
@@ -194,10 +195,9 @@ func findCallee(f types.Fact, symbols []types.Symbol) string {
 	return candidates[0].ID
 }
 
-
 func filterByExtension(files []string, exts []string) []string {
 	var out []string
-	for _, f :=range files {
+	for _, f := range files {
 		for _, e := range exts {
 			if strings.HasSuffix(f, e) {
 				out = append(out, f)

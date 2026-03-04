@@ -13,7 +13,7 @@ type Node struct {
 	Type NodeType `json:"type"`
 	Name string   `json:"name"`
 	Path string   `json:"path"`
-	Line int	  `json:"line,omitempty"`
+	Line int      `json:"line,omitempty"`
 }
 
 type EdgeType string
@@ -30,14 +30,32 @@ type Edge struct {
 }
 
 type Graph struct {
-	Nodes map[string]*Node `json:"nodes"`
-	Edges []*Edge          `json:"edges"`
+	Nodes  map[string]*Node    `json:"nodes"`
+	Edges  []*Edge             `json:"edges"`
+	AdjOut map[string][]string `json:"-"` // AdjOut[from] = []to  (what does 'from' call?)
+	AdjIn  map[string][]string `json:"-"` // AdjIn[to]   = []from (who calls 'to'?)
 }
 
 func New() *Graph {
 	return &Graph{
-		Nodes: make(map[string]*Node),
-		Edges: []*Edge{},
+		Nodes:  make(map[string]*Node),
+		Edges:  []*Edge{},
+		AdjOut: make(map[string][]string),
+		AdjIn:  make(map[string][]string),
+	}
+}
+
+// BuildIndex populates AdjOut and AdjIn from the Edges slice
+// should only be called once after the graph is fully constructed
+// only CallsEdges are indexed, ContainsEdges are skipped
+func (g *Graph) BuildIndex() {
+	g.AdjOut = make(map[string][]string)
+	g.AdjIn = make(map[string][]string)
+	for _, e := range g.Edges {
+		if e.Type == CallsEdge {
+			g.AdjOut[e.From] = append(g.AdjOut[e.From], e.To)
+			g.AdjIn[e.To] = append(g.AdjIn[e.To], e.From)
+		}
 	}
 }
 
