@@ -12,26 +12,26 @@ import (
 //
 // The start node itself is NOT included in the result — only its callers are.
 // Results are returned sorted alphabetically.
-func ImpactAnalysis(g *graph.Graph, startID string) []string {
-	visited := make(map[string]bool)
-	queue := []string{startID}
+type ImpactResult struct {
+	ID   string
+	Line int
+}
 
-	for len(queue) > 0 {
-		id := queue[0]
-		queue = queue[1:]
-
-		for _, caller := range g.AdjIn[id] {
-			if !visited[caller] {
-				visited[caller] = true
-				queue = append(queue, caller)
-			}
+func ImpactAnalysis(g *graph.Graph, startID string) []ImpactResult {
+	var results []ImpactResult
+	for _, e := range g.Edges {
+		if e.Type == graph.CallsEdge && e.To == startID {
+			results = append(results, ImpactResult{
+				ID:   e.From,
+				Line: e.Line,
+			})
 		}
 	}
-
-	result := make([]string, 0, len(visited))
-	for id := range visited {
-		result = append(result, id)
-	}
-	sort.Strings(result)
-	return result
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].ID != results[j].ID {
+			return results[i].ID < results[j].ID
+		}
+		return results[i].Line < results[j].Line
+	})
+	return results
 }

@@ -97,7 +97,7 @@ func main() {
 
 		fmt.Println("Impacted functions:")
 		for _, fn := range impacted {
-			fmt.Println(" ", fn)
+			fmt.Printf("  %s (line %d)\n", fn.ID, fn.Line)
 		}
 
 	case "export":

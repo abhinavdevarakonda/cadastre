@@ -98,7 +98,7 @@ func Build(scan *ScanResult, symbols []types.Symbol, facts []types.Fact) Result 
 		})
 
 		if d != "." {
-			g.AddEdge(filepath.Dir(d), d, graph.ContainsEdge)
+			g.AddEdge(filepath.Dir(d), d, graph.ContainsEdge, 0)
 		}
 	}
 
@@ -113,7 +113,7 @@ func Build(scan *ScanResult, symbols []types.Symbol, facts []types.Fact) Result 
 			Path: f,
 		})
 
-		g.AddEdge(filepath.Dir(f), f, graph.ContainsEdge)
+		g.AddEdge(filepath.Dir(f), f, graph.ContainsEdge, 0)
 	}
 
 	// functions (symbols)
@@ -128,14 +128,14 @@ func Build(scan *ScanResult, symbols []types.Symbol, facts []types.Fact) Result 
 			Line: sym.StartLine,
 		})
 
-		g.AddEdge(p, sym.ID, graph.ContainsEdge)
+		g.AddEdge(p, sym.ID, graph.ContainsEdge, 0)
 	}
 
 	for _, fact := range facts {
 		caller := findCaller(fact, symbols)
 		callee := findCallee(fact, symbols)
 		if caller != "" && callee != "" {
-			g.AddEdge(caller, callee, graph.CallsEdge)
+			g.AddEdge(caller, callee, graph.CallsEdge, fact.Line)
 		}
 	}
 

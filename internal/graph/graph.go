@@ -27,6 +27,7 @@ type Edge struct {
 	From string   `json:"from"`
 	To   string   `json:"to"`
 	Type EdgeType `json:"type"`
+	Line int      `json:"line,omitempty"` // Line number where 'from' calls 'to'
 }
 
 type Graph struct {
@@ -63,10 +64,11 @@ func (g *Graph) AddNode(n *Node) {
 	g.Nodes[n.ID] = n
 }
 
-func (g *Graph) AddEdge(from, to string, t EdgeType) {
+func (g *Graph) AddEdge(from, to string, t EdgeType, line int) {
 	g.Edges = append(g.Edges, &Edge{
 		From: from,
 		To:   to,
 		Type: t,
+		Line: line,
 	})
 }
