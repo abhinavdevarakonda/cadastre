@@ -311,7 +311,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.rightMode == ModeImpact {
 				m.rightItems = analyzer.ImpactAnalysis(m.graph, selectedItem.ID)
 			} else {
-				m.rightItems = nil
+				m.rightItems = analyzer.TraceAnalysis(m.graph, selectedItem.ID)
 			}
 		} else {
 			m.rightItems = nil

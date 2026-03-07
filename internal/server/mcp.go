@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/abhinavdevarakonda/maplet/internal/analyzer"
@@ -14,54 +16,142 @@ import (
 func NewMCPServer(result analyzer.Result) *mcpserver.MCPServer {
 	s := mcpserver.NewMCPServer("maplet", "1.0.0")
 
-	s.AddTool(mcp.NewTool("list_nodes",
-		mcp.WithDescription("List all directories, files, and functions"),
+	s.AddTool(mcp.NewTool("find_symbol",
+		mcp.WithDescription("Find function/symbol IDs by name"),
+		mcp.WithString("name", mcp.Description("Symbol name"), mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		var output []string
-		for id, node := range result.Graph.Nodes {
-			output = append(output, fmt.Sprintf("%s (%s)", id, node.Type))
+		name, _ := request.RequireString("name")
+		var matches []string
+		for id, n := range result.Graph.Nodes {
+			if n.Name == name && n.Type == graph.FunctionNode {
+				matches = append(matches, fmt.Sprintf("%s (%s)", id, n.Path))
+			}
 		}
-		return mcp.NewToolResultText(strings.Join(output, "\n")), nil
+		if len(matches) == 0 {
+			return mcp.NewToolResultText("No matching functions found."), nil
+		}
+		return mcp.NewToolResultText("Found functions:\n" + strings.Join(matches, "\n")), nil
 	})
 
 	s.AddTool(mcp.NewTool("get_node_details",
-		mcp.WithDescription("Get info about a node"),
+		mcp.WithDescription("Get detailed info about a node (dir, file, or function)"),
 		mcp.WithString("id", mcp.Description("Node ID"), mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, _ := request.RequireString("id")
 		n, ok := result.Graph.Nodes[id]
 		if !ok {
-			return mcp.NewToolResultError("not found"), nil
+			return mcp.NewToolResultError("Node not found"), nil
 		}
-		return mcp.NewToolResultText(fmt.Sprintf("ID: %s\nType: %s\nPath: %s", n.ID, n.Type, n.Path)), nil
+		return mcp.NewToolResultText(fmt.Sprintf("ID: %s\nType: %s\nPath: %s\nLine: %d", n.ID, n.Type, n.Path, n.Line)), nil
 	})
 
 	s.AddTool(mcp.NewTool("get_callers",
-		mcp.WithDescription("Find what calls this function"),
+		mcp.WithDescription("Find immediate callers of a function"),
 		mcp.WithString("function_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, _ := request.RequireString("function_id")
+		callers := analyzer.ImpactAnalysis(result.Graph, id)
 		var res []string
-		for _, e := range result.Graph.Edges {
-			if e.Type == graph.CallsEdge && e.To == id {
-				res = append(res, e.From)
-			}
+		for _, c := range callers {
+			res = append(res, fmt.Sprintf("%s (at line %d)", c.ID, c.Line))
 		}
 		return mcp.NewToolResultText(strings.Join(res, "\n")), nil
 	})
 
 	s.AddTool(mcp.NewTool("get_callees",
-		mcp.WithDescription("Find what this function calls"),
+		mcp.WithDescription("Find functions called by this function"),
 		mcp.WithString("function_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		id, _ := request.RequireString("function_id")
+		callees := analyzer.TraceAnalysis(result.Graph, id)
 		var res []string
-		for _, e := range result.Graph.Edges {
-			if e.Type == graph.CallsEdge && e.From == id {
-				res = append(res, e.To)
+		for _, c := range callees {
+			res = append(res, fmt.Sprintf("%s (at line %d)", c.ID, c.Line))
+		}
+		return mcp.NewToolResultText(strings.Join(res, "\n")), nil
+	})
+
+	s.AddTool(mcp.NewTool("impact_analysis",
+		mcp.WithDescription("Transitively find all functions affected if this function changes"),
+		mcp.WithString("function_id", mcp.Required()),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, _ := request.RequireString("function_id")
+		affected := analyzer.TransitiveImpact(result.Graph, id)
+		return mcp.NewToolResultText(strings.Join(affected, "\n")), nil
+	})
+
+	s.AddTool(mcp.NewTool("trace_calls",
+		mcp.WithDescription("Transitively find all functions called by this function"),
+		mcp.WithString("function_id", mcp.Required()),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, _ := request.RequireString("function_id")
+		called := analyzer.TransitiveTrace(result.Graph, id)
+		return mcp.NewToolResultText(strings.Join(called, "\n")), nil
+	})
+
+	s.AddTool(mcp.NewTool("call_path",
+		mcp.WithDescription("Find a call path between two functions"),
+		mcp.WithString("start_id", mcp.Required()),
+		mcp.WithString("end_id", mcp.Required()),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		start, _ := request.RequireString("start_id")
+		end, _ := request.RequireString("end_id")
+		path := analyzer.FindPath(result.Graph, start, end)
+		if len(path) == 0 {
+			return mcp.NewToolResultText("No path found."), nil
+		}
+		return mcp.NewToolResultText(strings.Join(path, " -> ")), nil
+	})
+
+	s.AddTool(mcp.NewTool("get_file_symbols",
+		mcp.WithDescription("List all functions defined in a specific file"),
+		mcp.WithString("file_path", mcp.Required()),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		path, _ := request.RequireString("file_path")
+		var res []string
+		for id, n := range result.Graph.Nodes {
+			if n.Path == path && n.Type == graph.FunctionNode {
+				res = append(res, fmt.Sprintf("%s (line %d)", id, n.Line))
 			}
 		}
 		return mcp.NewToolResultText(strings.Join(res, "\n")), nil
+	})
+
+	s.AddTool(mcp.NewTool("get_node_source",
+		mcp.WithDescription("Get the source code for a specific function node"),
+		mcp.WithString("id", mcp.Required()),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		id, _ := request.RequireString("id")
+		n, ok := result.Graph.Nodes[id]
+		if !ok || n.Type != graph.FunctionNode {
+			return mcp.NewToolResultError("Function node not found"), nil
+		}
+
+		// Use EndLine for precise extraction
+		endLine := n.EndLine
+		if endLine == 0 {
+			endLine = n.Line + 20
+		}
+
+		f, err := os.Open(n.Path)
+		if err != nil {
+			return mcp.NewToolResultError("Could not open file"), nil
+		}
+		defer f.Close()
+
+		var source []string
+		scanner := bufio.NewScanner(f)
+		curr := 1
+		for scanner.Scan() {
+			if curr >= n.Line && curr <= endLine {
+				source = append(source, scanner.Text())
+			}
+			if curr > endLine {
+				break
+			}
+			curr++
+		}
+		return mcp.NewToolResultText(strings.Join(source, "\n")), nil
 	})
 
 	return s
