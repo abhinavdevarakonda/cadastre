@@ -273,6 +273,8 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		const jump = 5
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -308,6 +310,51 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					if m.rightSelected > 0 {
 						m.rightSelected--
+					}
+				}
+			}
+		case "ctrl+j":
+			if m.focus == 0 {
+				m.selected += jump
+				if m.selected >= len(m.items) {
+					m.selected = len(m.items) - 1
+				}
+			} else {
+				if m.rightMode == ModeFlow {
+					if len(m.history) > 0 {
+						m.playhead += jump
+						if m.playhead >= len(m.history) {
+							m.playhead = len(m.history) - 1
+						}
+						m.syncToHistory()
+					}
+				} else {
+					m.rightSelected += jump
+					if m.rightSelected >= len(m.rightItems) {
+						m.rightSelected = len(m.rightItems) - 1
+					}
+				}
+			}
+		case "ctrl+k":
+			if m.focus == 0 {
+				m.selected -= jump
+				if m.selected < 0 {
+					m.selected = 0
+				}
+			} else {
+				if m.rightMode == ModeFlow {
+					if len(m.history) > 0 {
+						m.playhead -= jump
+						if m.playhead < 0 {
+							m.playhead = 0
+						}
+						m.isLive = false
+						m.syncToHistory()
+					}
+				} else {
+					m.rightSelected -= jump
+					if m.rightSelected < 0 {
+						m.rightSelected = 0
 					}
 				}
 			}
