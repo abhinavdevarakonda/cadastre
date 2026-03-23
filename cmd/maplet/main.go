@@ -127,7 +127,7 @@ func main() {
 		}
 
 	case "flow":
-		// 1. Static Analysis
+		// static analysis
 		result := analyzer.Analyze(path)
 
 		target := ""
@@ -135,7 +135,7 @@ func main() {
 			target = os.Args[3]
 		}
 
-		// 2. Start Monitor TUI
+		// start monitor TUI
 		if err := tui.StartMonitor(result.Graph, target); err != nil {
 			panic(err)
 		}

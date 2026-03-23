@@ -2,13 +2,46 @@ package tracer
 
 import (
 	"bufio"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
+
+//go:embed sitecustomize.py py_trace.py
+var hookFiles embed.FS
+
+// ensureHookDir unpacks the embedded Python files into a local cache directory
+// so that PYTHONPATH can point to them on any machine.
+func ensureHookDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	hookDir := filepath.Join(home, ".maplet", "hooks")
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		return "", err
+	}
+
+	for _, name := range []string{"sitecustomize.py", "py_trace.py"} {
+		content, err := hookFiles.ReadFile(name)
+		if err != nil {
+			return "", err
+		}
+		destPath := filepath.Join(hookDir, name)
+
+		// Always overwrite to ensure they have the latest version of your tools
+		if err := os.WriteFile(destPath, content, 0644); err != nil {
+			return "", err
+		}
+	}
+	return hookDir, nil
+}
 
 type Event struct {
 	Event     string  `json:"event"`
@@ -45,7 +78,12 @@ func runCmd(fullCmd string, localOnly bool, onEvent func(Event)) error {
 
 	// Inject Maplet universal Python hook via PYTHONPATH
 	cmd.Env = append(cmd.Env, "MAPLET_TRACE=1")
-	hookDir := "/home/abee/code/projects/maplet/internal/tracer"
+
+	hookDir, err := ensureHookDir()
+	if err != nil {
+		return fmt.Errorf("failed to setup maplet hooks: %v", err)
+	}
+
 	pythonPathFound := false
 	for i, env := range cmd.Env {
 		if strings.HasPrefix(env, "PYTHONPATH=") {
@@ -87,7 +125,6 @@ func runCmd(fullCmd string, localOnly bool, onEvent func(Event)) error {
 		line := scanner.Text()
 		var event Event
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			// Not a trace event? Echo it to the user's stderr so they see logs/errors
 			fmt.Fprintln(os.Stderr, line)
 			continue
 		}

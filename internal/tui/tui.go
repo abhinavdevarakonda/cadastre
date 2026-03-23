@@ -64,7 +64,14 @@ type Model struct {
 	isLive       bool
 	isMonitoring bool
 	hitCounts    map[string]int // ID -> count
-	rightScroll  int            // Add offset state for Flow pane scrolling
+	rightScroll  int
+
+	// Search & QoL
+	searching   bool
+	searchText  string
+	followLive  bool
+	pendingG    bool
+	oldExpanded map[string]bool // Backups for "c" toggle
 }
 
 type TreeItem struct {
@@ -79,11 +86,12 @@ type TreeItem struct {
 
 func NewModel(g *graph.Graph) Model {
 	m := Model{
-		graph:     g,
-		expanded:  make(map[string]bool),
-		rightMode: ModeImpact,
-		isLive:    true,
-		hitCounts: make(map[string]int),
+		graph:      g,
+		expanded:   make(map[string]bool),
+		rightMode:  ModeImpact,
+		isLive:     true,
+		followLive: true,
+		hitCounts:  make(map[string]int),
 	}
 
 	// Expand root directory by default (often ".")
@@ -275,10 +283,95 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		const jump = 5
+		key := msg.String()
 
-		switch msg.String() {
+		if m.pendingG {
+			m.pendingG = false
+			if key == "g" {
+				m.selected = 0
+				m.playhead = 0
+				m.syncToHistory()
+				return m, nil
+			}
+		}
+
+		if m.searching {
+			switch key {
+			case "enter", "esc":
+				m.searching = false
+			case "backspace":
+				if len(m.searchText) > 0 {
+					m.searchText = m.searchText[:len(m.searchText)-1]
+				}
+			default:
+				if len(key) == 1 {
+					m.searchText += key
+					query := strings.ToLower(m.searchText)
+					if query == "" {
+						break
+					}
+
+					if m.focus == 0 {
+						// Search GRAPH (Deep search, find then expand ancestors)
+						var matchID string
+						for id, n := range m.graph.Nodes {
+							if strings.Contains(strings.ToLower(n.Name), query) {
+								matchID = id
+								break
+							}
+						}
+						
+						if matchID != "" {
+							// Expand all ancestors
+							curr := matchID
+							for {
+								parentID := ""
+								for _, e := range m.graph.Edges {
+									if e.To == curr && e.Type == graph.ContainsEdge {
+										parentID = e.From
+										break
+									}
+								}
+								if parentID == "" {
+									break
+								}
+								m.expanded[parentID] = true
+								curr = parentID
+							}
+							m.refreshTree()
+							for i, item := range m.items {
+								if item.ID == matchID {
+									m.selected = i
+									break
+								}
+							}
+						}
+					} else if m.focus == 1 && m.rightMode == ModeFlow {
+						// Search HISTORY (Jump playhead)
+						for i := 0; i < len(m.history); i++ {
+							if strings.Contains(strings.ToLower(m.history[i].Name), query) {
+								m.playhead = i
+								m.isLive = false
+								m.syncToHistory()
+								break
+							}
+						}
+					}
+				}
+			}
+			return m, nil
+		}
+
+		switch key {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "/":
+			m.searching = true
+			m.searchText = ""
+		case "g":
+			m.pendingG = true
+		case "f":
+			m.followLive = !m.followLive
 		case "j", "down":
 			if m.focus == 0 {
 				if m.selected < len(m.items)-1 {
@@ -359,6 +452,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+		case "G":
+			if m.focus == 0 {
+				m.selected = len(m.items) - 1
+			} else {
+				m.playhead = len(m.history) - 1
+			}
+		case "c": // c: Smart Collapse/Restore Toggle
+			isMainlyCollapsed := true
+			for id, expanded := range m.expanded {
+				if id != "." && id != "/" && expanded {
+					isMainlyCollapsed = false
+					break
+				}
+			}
+
+			if isMainlyCollapsed {
+				if len(m.oldExpanded) > 0 {
+					m.expanded = m.oldExpanded
+					m.oldExpanded = nil
+				} else {
+					for id, n := range m.graph.Nodes {
+						if n.Type == graph.DirectoryNode && !strings.Contains(n.Path, string(os.PathSeparator)) {
+							m.expanded[id] = true
+						}
+					}
+				}
+			} else {
+				m.oldExpanded = make(map[string]bool)
+				for k, v := range m.expanded {
+					m.oldExpanded[k] = v
+				}
+				m.expanded = make(map[string]bool)
+				m.expanded["."] = true
+				m.selected = 0
+			}
+			m.refreshTree()
+
+
 		case "h", "left":
 			if m.focus == 1 {
 				m.focus = 0
@@ -485,7 +616,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.isLive {
 			m.playhead = len(m.history) - 1
-			m.syncToHistory()
+			if m.followLive {
+				m.syncToHistory()
+			}
 		}
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -723,7 +856,11 @@ func (m Model) View() string {
 	// 4. Bottom Bar
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
 
-	footerText := " j/k move   h/l expand/focus   i toggle focus   enter open   t trace   q quit"
+	footerStr := " j/k move   h/l expand/focus   i toggle focus   enter open   t trace   / search   f follow   q quit"
+	if m.searching {
+		footerStr = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true).Render(" / ") + m.searchText + " "
+	}
+
 	if len(m.history) > 0 {
 		status := ""
 		if m.isMonitoring {
@@ -731,16 +868,19 @@ func (m Model) View() string {
 			if !m.isLive {
 				status = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("○ PAUSED")
 			}
+			if m.followLive {
+				status += lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render(" (FOLLOWING)")
+			}
 			status += " | "
 		}
-		footerText = fmt.Sprintf(" %sHit %d/%d | H/L scrub | Space live | ", status, m.playhead+1, len(m.history)) + footerText
+		footerStr = fmt.Sprintf(" %sHit %d/%d | H/L scrub | Space live | ", status, m.playhead+1, len(m.history)) + footerStr
 	}
 	bottomBar := lipgloss.NewStyle().
 		Width(m.width).
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(lipgloss.Color("240")).
 		Foreground(lipgloss.Color("252")).
-		Render(footerText)
+		Render(footerStr)
 
 	return lipgloss.JoinVertical(lipgloss.Top, topBar, panes, bottomBar)
 }
