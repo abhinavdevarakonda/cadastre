@@ -11,25 +11,12 @@ builds:
     main: ./cmd/maplet
     goos:
       - linux
-      - darwin
     goarch:
       - amd64
       - arm64
     ignore:
       - goos: windows  # skip windows for now, CGO on windows is extra complex
     overrides:
-      - goos: darwin
-        goarch: arm64
-        env:
-          - CGO_ENABLED=1
-          - CC=aarch64-apple-darwin21.4-clang
-          - CXX=aarch64-apple-darwin21.4-clang++
-      - goos: darwin
-        goarch: amd64
-        env:
-          - CGO_ENABLED=1
-          - CC=x86_64-apple-darwin21.4-clang
-          - CXX=x86_64-apple-darwin21.4-clang++
       - goos: linux
         goarch: arm64
         env:
