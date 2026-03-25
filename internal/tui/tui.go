@@ -72,6 +72,12 @@ type Model struct {
 	followLive  bool
 	pendingG    bool
 	oldExpanded map[string]bool // Backups for "c" toggle
+	showHelp    bool
+
+	// Status bar info (computed once)
+	languages   string
+	funcCount   int
+	projectPath string
 }
 
 type TreeItem struct {
@@ -92,6 +98,54 @@ func NewModel(g *graph.Graph) Model {
 		isLive:     true,
 		followLive: true,
 		hitCounts:  make(map[string]int),
+	}
+
+	// project path for status bar (last 3 dirs)
+	if wd, err := os.Getwd(); err == nil {
+		parts := strings.Split(wd, string(os.PathSeparator))
+		if len(parts) > 3 {
+			m.projectPath = ".../" + strings.Join(parts[len(parts)-3:], "/")
+		} else {
+			m.projectPath = wd
+		}
+	} else {
+		m.projectPath = "."
+	}
+
+	// Compute stats for status bar
+	langSet := make(map[string]bool)
+	for _, n := range g.Nodes {
+		if n.Type == graph.FunctionNode {
+			m.funcCount++
+		}
+		if n.Type == graph.FileNode {
+			ext := filepath.Ext(n.Name)
+			switch ext {
+			case ".py":
+				langSet["Python"] = true
+			case ".go":
+				langSet["Go"] = true
+			case ".js":
+				langSet["JavaScript"] = true
+			case ".ts":
+				langSet["TypeScript"] = true
+			case ".rb":
+				langSet["Ruby"] = true
+			case ".rs":
+				langSet["Rust"] = true
+			case ".java":
+				langSet["Java"] = true
+			}
+		}
+	}
+	langs := make([]string, 0, len(langSet))
+	for l := range langSet {
+		langs = append(langs, l)
+	}
+	sort.Strings(langs)
+	m.languages = strings.Join(langs, ", ")
+	if m.languages == "" {
+		m.languages = "Unknown"
 	}
 
 	// Expand root directory by default (often ".")
@@ -320,7 +374,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								break
 							}
 						}
-						
+
 						if matchID != "" {
 							// Expand all ancestors
 							curr := matchID
@@ -365,7 +419,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch key {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "?":
+			m.showHelp = !m.showHelp
+			return m, nil
 		case "/":
+			if m.showHelp {
+				m.showHelp = false
+				return m, nil
+			}
 			m.searching = true
 			m.searchText = ""
 		case "g":
@@ -489,7 +550,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.refreshTree()
 
-
 		case "h", "left":
 			if m.focus == 1 {
 				m.focus = 0
@@ -583,7 +643,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.itemToOpen = &TreeItem{
 							ID:   n.ID,
 							Path: n.Path,
-							Line: res.Line, // Open at call site line
+						}
+						if m.rightMode == ModeImpact {
+							m.itemToOpen.Line = res.Line // call site in caller's file
+						} else {
+							m.itemToOpen.Line = n.Line // callee's definition
 						}
 						return m, tea.Quit
 					}
@@ -830,20 +894,39 @@ func (m Model) View() string {
 			rightLines = append(rightLines, line)
 		}
 	} else if len(m.rightItems) > 0 {
+		maxLineW := halfWidth - 6 // account for pane padding
 		for i := 0; i < len(m.rightItems); i++ {
-			if len(rightLines) >= paneHeight-1 {
+			if len(rightLines) >= paneHeight-2 {
 				break
 			}
 			res := m.rightItems[i]
 			n := m.graph.Nodes[res.ID]
 			if n != nil {
 				filename := filepath.Base(n.Path)
-				line1 := fmt.Sprintf("%s%s %s %s", funcStyle.Render("ƒ "), funcStyle.Render(n.Name), faintStyle.Render("["+filename+"]"), faintStyle.Render(fmt.Sprintf("(line %d)", res.Line)))
-				line2 := "  " + faintStyle.Italic(true).Render(getSignature(n.Path, res.Line))
+				// Line 1: ƒ function_name
+				line1 := funcStyle.Render("ƒ ") + funcStyle.Render(n.Name)
+				// Line 2:   file.py:line
+				line2 := "  " + faintStyle.Render(fmt.Sprintf("%s:%d", filename, res.Line))
+				// Line 3:   signature
+				sig := getSignature(n.Path, res.Line)
+				line3 := ""
+				if sig != "" {
+					if lipgloss.Width(sig) > maxLineW-2 {
+						sig = sig[:maxLineW-5] + "…"
+					}
+					line3 = "  " + faintStyle.Italic(true).Render(sig)
+				}
 				if i == m.rightSelected && m.focus == 1 {
-					line1 = selectedStyle.Render(line1 + strings.Repeat(" ", 15))
+					padLen := maxLineW - lipgloss.Width(line1)
+					if padLen < 0 {
+						padLen = 0
+					}
+					line1 = selectedStyle.Render(line1 + strings.Repeat(" ", padLen))
 				}
 				rightLines = append(rightLines, line1, line2)
+				if line3 != "" {
+					rightLines = append(rightLines, line3)
+				}
 			}
 		}
 	}
@@ -856,31 +939,92 @@ func (m Model) View() string {
 	// 4. Bottom Bar
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, leftPane, rightPane)
 
-	footerStr := " j/k move   h/l expand/focus   i toggle focus   enter open   t trace   / search   f follow   q quit"
-	if m.searching {
-		footerStr = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true).Render(" / ") + m.searchText + " "
-	}
+	// Neovim-style status bar: path │ language │ functions │ mode  [trace info on right]
+	sep := faintStyle.Render(" │ ")
 
+	// Left side: project info
+	modeName := "Impact"
+	switch m.rightMode {
+	case ModeTrace:
+		modeName = "Trace"
+	case ModeFlow:
+		modeName = "Flow"
+	}
+	statusLeft := " " + textStyle.Render(m.projectPath) + sep +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(m.languages) + sep +
+		faintStyle.Render(fmt.Sprintf("%d functions", m.funcCount)) + sep +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render(modeName)
+
+	// Right side: trace status (if active)
+	statusRight := ""
 	if len(m.history) > 0 {
-		status := ""
 		if m.isMonitoring {
-			status = lipgloss.NewStyle().Foreground(lipgloss.Color("160")).Render("● RECORDING")
-			if !m.isLive {
-				status = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("○ PAUSED")
+			if m.isLive {
+				statusRight = lipgloss.NewStyle().Foreground(lipgloss.Color("160")).Render("● REC")
+			} else {
+				statusRight = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("○ PAUSED")
 			}
 			if m.followLive {
-				status += lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render(" (FOLLOWING)")
+				statusRight += lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render(" ⟳")
 			}
-			status += " | "
+			statusRight += " "
 		}
-		footerStr = fmt.Sprintf(" %sHit %d/%d | H/L scrub | Space live | ", status, m.playhead+1, len(m.history)) + footerStr
+		statusRight += faintStyle.Render(fmt.Sprintf("Hit %d/%d", m.playhead+1, len(m.history)))
 	}
+
+	var footerStr string
+	if m.searching {
+		footerStr = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true).Render(" / ") + m.searchText + " "
+	} else {
+		// Pad between left and right
+		gap := m.width - lipgloss.Width(statusLeft) - lipgloss.Width(statusRight) - 1
+		if gap < 1 {
+			gap = 1
+		}
+		footerStr = statusLeft + strings.Repeat(" ", gap) + statusRight
+	}
+
 	bottomBar := lipgloss.NewStyle().
 		Width(m.width).
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(lipgloss.Color("240")).
 		Foreground(lipgloss.Color("252")).
 		Render(footerStr)
+
+	// 5. Help overlay
+	if m.showHelp {
+		helpContent := []string{
+			headerStyle.Width(40).Render("Keybindings"),
+			"",
+			"  " + funcStyle.Render("j/k") + faintStyle.Render("         move up/down"),
+			"  " + funcStyle.Render("ctrl+j/k") + faintStyle.Render("    jump 5"),
+			"  " + funcStyle.Render("h/l") + faintStyle.Render("         collapse/expand"),
+			"  " + funcStyle.Render("i") + faintStyle.Render("           toggle focus"),
+			"  " + funcStyle.Render("enter") + faintStyle.Render("       open in editor"),
+			"  " + funcStyle.Render("t") + faintStyle.Render("           cycle mode"),
+			"  " + funcStyle.Render("/") + faintStyle.Render("           search"),
+			"  " + funcStyle.Render("c") + faintStyle.Render("           collapse/restore"),
+			"  " + funcStyle.Render("g g / G") + faintStyle.Render("     top / bottom"),
+			"",
+			headerStyle.Width(40).Render("Trace Controls"),
+			"",
+			"  " + funcStyle.Render("H/L") + faintStyle.Render("         scrub history"),
+			"  " + funcStyle.Render("space") + faintStyle.Render("       toggle live"),
+			"  " + funcStyle.Render("f") + faintStyle.Render("           follow mode"),
+			"",
+			faintStyle.Render("       press ? to close"),
+		}
+		helpBox := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("240")).
+			Padding(1, 2).
+			Background(lipgloss.Color("235")).
+			Render(lipgloss.JoinVertical(lipgloss.Left, helpContent...))
+
+		// Center the overlay
+		overlay := lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, helpBox)
+		return overlay
+	}
 
 	return lipgloss.JoinVertical(lipgloss.Top, topBar, panes, bottomBar)
 }

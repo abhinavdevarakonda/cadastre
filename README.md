@@ -30,6 +30,7 @@ go install github.com/abhinavdevarakonda/maplet/cmd/maplet@latest
 ---
 
 ## Usage Overview
+> Note: Maplet currently provides full dynamic execution tracing for Python. Static analysis and project navigation are supported for Python, Go, and C. Additional languages will be added soon! (I'm sorry i just deal with those more than others, so I had to add them first.)
 
 Maplet operates in a dual-pane workflow. The left pane acts as the "body", while the right pane is the "brain", tracing the flow the codebase takes during runtime.
 

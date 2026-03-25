@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// embed sitecustomize.py py_trace.py
+//go:embed sitecustomize.py py_trace.py
 var hookFiles embed.FS
 
 // ensureHookDir unpacks the embedded Python files into a local cache directory
@@ -77,6 +77,7 @@ func runCmd(fullCmd string, localOnly bool, onEvent func(Event)) error {
 
 	// Inject Maplet universal Python hook via PYTHONPATH
 	cmd.Env = append(cmd.Env, "MAPLET_TRACE=1")
+	cmd.Env = append(cmd.Env, "PYTHONUNBUFFERED=1")
 
 	hookDir, err := ensureHookDir()
 	if err != nil {
