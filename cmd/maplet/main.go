@@ -149,9 +149,17 @@ func main() {
 		}
 
 	case "mcp":
-		result := analyzer.Analyze(path)
-		mcpSrv := server.NewMCPServer(&result)
+		// empty result so we can start the server immediately
+		result := &analyzer.Result{Root: path}
+		mcpSrv := server.NewMCPServer(result)
 		stdioSrv := mcpserver.NewStdioServer(mcpSrv)
+
+		// run analysis in background so it doesn't block server startup
+		go func() {
+			fullResult := analyzer.Analyze(path)
+			*result = fullResult
+		}()
+
 		if err := stdioSrv.Listen(context.Background(), os.Stdin, os.Stdout); err != nil {
 			panic(err)
 		}

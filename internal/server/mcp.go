@@ -41,6 +41,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Find function/symbol IDs by name"),
 		mcp.WithString("name", mcp.Description("Symbol name"), mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		name, _ := request.RequireString("name")
 		var matches []string
 		for id, n := range result.Graph.Nodes {
@@ -58,6 +61,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Get detailed info about a node (dir, file, or function)"),
 		mcp.WithString("id", mcp.Description("Node ID"), mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		id, _ := request.RequireString("id")
 		n, ok := result.Graph.Nodes[id]
 		if !ok {
@@ -70,6 +76,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Find immediate callers of a function"),
 		mcp.WithString("function_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		id, _ := request.RequireString("function_id")
 		callers := analyzer.ImpactAnalysis(result.Graph, id)
 		var res []string
@@ -83,6 +92,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Find functions called by this function"),
 		mcp.WithString("function_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		id, _ := request.RequireString("function_id")
 		callees := analyzer.TraceAnalysis(result.Graph, id)
 		var res []string
@@ -96,6 +108,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Transitively find all functions affected if this function changes"),
 		mcp.WithString("function_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		id, _ := request.RequireString("function_id")
 		affected := analyzer.TransitiveImpact(result.Graph, id)
 		return mcp.NewToolResultText(strings.Join(affected, "\n")), nil
@@ -105,6 +120,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Transitively find all functions called by this function"),
 		mcp.WithString("function_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		id, _ := request.RequireString("function_id")
 		called := analyzer.TransitiveTrace(result.Graph, id)
 		return mcp.NewToolResultText(strings.Join(called, "\n")), nil
@@ -115,6 +133,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithString("start_id", mcp.Required()),
 		mcp.WithString("end_id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		start, _ := request.RequireString("start_id")
 		end, _ := request.RequireString("end_id")
 		path := analyzer.FindPath(result.Graph, start, end)
@@ -128,6 +149,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("List all functions defined in a specific file"),
 		mcp.WithString("file_path", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		path, _ := request.RequireString("file_path")
 		var res []string
 		for id, n := range result.Graph.Nodes {
@@ -142,6 +166,9 @@ func NewMCPServer(result *analyzer.Result) *mcpserver.MCPServer {
 		mcp.WithDescription("Get the source code for a specific function node"),
 		mcp.WithString("id", mcp.Required()),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		if result.Graph == nil {
+			return mcp.NewToolResultText("Maplet is still analyzing the project in the background. Please try again in a few seconds."), nil
+		}
 		id, _ := request.RequireString("id")
 		n, ok := result.Graph.Nodes[id]
 		if !ok || n.Type != graph.FunctionNode {
