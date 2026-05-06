@@ -26,16 +26,12 @@ import (
 var _ = agents.DetectLanguage // reference to avoid unused import
 
 func main() {
+	// cadr or cadr <path> → open TUI directly
 	if len(os.Args) < 2 {
-		fmt.Println("Usage:")
-		fmt.Println("	cadr analyze <path>")
-		fmt.Println("	cadr export <path>")
-		fmt.Println("	cadr serve <path>")
-		fmt.Println("	cadr mcp <path>")
-		fmt.Println("	cadr nav <path>")
-		fmt.Println("	cadr flow <path>")
-		fmt.Println("	cadr run <command>")
-		fmt.Println("	cadr rec <command>")
+		result := analyzer.Analyze(".")
+		if err := tui.Start(result.Graph); err != nil {
+			panic(err)
+		}
 		return
 	}
 
@@ -44,6 +40,19 @@ func main() {
 	path := "."
 	if len(os.Args) > 2 {
 		path = os.Args[2]
+	}
+
+	// if the first arg looks like a path (not a known subcommand), open TUI on it
+	knownCommands := map[string]bool{
+		"analyze": true, "impact": true, "export": true,
+		"serve": true, "mcp": true, "run": true, "rec": true,
+	}
+	if !knownCommands[command] {
+		result := analyzer.Analyze(command)
+		if err := tui.Start(result.Graph); err != nil {
+			panic(err)
+		}
+		return
 	}
 
 	switch command {
@@ -128,25 +137,6 @@ func main() {
 			panic(err)
 		}
 
-	case "nav", "navigate", "tui":
-		result := analyzer.Analyze(path)
-		if err := tui.Start(result.Graph); err != nil {
-			panic(err)
-		}
-
-	case "flow":
-		// static analysis
-		result := analyzer.Analyze(path)
-
-		target := ""
-		if len(os.Args) >= 4 {
-			target = os.Args[3]
-		}
-
-		// start monitor TUI
-		if err := tui.StartMonitor(result.Graph, target); err != nil {
-			panic(err)
-		}
 
 	case "mcp":
 		// empty result so we can start the server immediately

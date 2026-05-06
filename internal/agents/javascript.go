@@ -13,7 +13,7 @@ func init() {
 		Files:         javascriptFiles,
 		EnvVar:        "NODE_OPTIONS",
 		EnvValue:      "--require {hookDir}/js_trace.js",
-		TraceEnvVar:   "MAPLET_TRACE",
+		TraceEnvVar:   "CADR_TRACE",
 		TraceEnvValue: "1",
 	})
 }

@@ -12,7 +12,7 @@ func init() {
 		Name:          "python",
 		Files:         pythonFiles,
 		EnvVar:        "PYTHONPATH",
-		TraceEnvVar:   "MAPLET_TRACE",
+		TraceEnvVar:   "CADR_TRACE",
 		TraceEnvValue: "1",
 	})
 }

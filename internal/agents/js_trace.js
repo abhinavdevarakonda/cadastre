@@ -13,7 +13,7 @@ function connect() {
     sock = new net.Socket();
     sock.connect(PORT, 'localhost', () => {
         connected = true;
-        process.stderr.write('Maplet: Connected to monitor.\n');
+        process.stderr.write('Cadastre: Connected to monitor.\n');
         while (eventQueue.length > 0) {
             trySend(eventQueue.shift());
         }
@@ -61,7 +61,7 @@ function _safeArgs(args) {
 }
 
 // Global trace function injected into every instrumented function body
-global.__maplet_trace = function (name, file, line, args) {
+global.__cadr_trace = function (name, file, line, args) {
     trySend({
         fn: name,
         file: file,
@@ -77,7 +77,7 @@ function isProjectFile(filename) {
         !filename.includes('js_trace');
 }
 
-// Source instrumentation: inject __maplet_trace() at the start of every function body
+// Source instrumentation: inject __cadr_trace() at the start of every function body
 function instrumentSource(code, filename) {
     // Patterns that indicate a function definition followed by {
     // We find the opening { and inject our trace call right after it
@@ -129,7 +129,7 @@ function instrumentSource(code, filename) {
 
     let result = code;
     for (const ins of insertions) {
-        const traceCall = `__maplet_trace(${JSON.stringify(ins.funcName)},${JSON.stringify(filename)},${ins.line},arguments);`;
+        const traceCall = `__cadr_trace(${JSON.stringify(ins.funcName)},${JSON.stringify(filename)},${ins.line},arguments);`;
         result = result.slice(0, ins.pos) + traceCall + result.slice(ins.pos);
     }
 
@@ -144,7 +144,7 @@ Module.prototype._compile = function (content, filename) {
             content = instrumentSource(content, filename);
         } catch (e) {
             // If instrumentation fails, run uninstrumented
-            process.stderr.write(`Maplet: instrumentation failed for ${filename}: ${e.message}\n`);
+            process.stderr.write(`Cadastre: instrumentation failed for ${filename}: ${e.message}\n`);
         }
     }
     return originalCompile.call(this, content, filename);
