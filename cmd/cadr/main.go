@@ -29,7 +29,7 @@ func main() {
 	// cadr or cadr <path> → open TUI directly
 	if len(os.Args) < 2 {
 		result := analyzer.Analyze(".")
-		if err := tui.Start(result.Graph); err != nil {
+		if err := tui.Start(result.Graph, "."); err != nil {
 			panic(err)
 		}
 		return
@@ -50,7 +50,7 @@ func main() {
 	}
 	if !knownCommands[command] {
 		result := analyzer.Analyze(command)
-		if err := tui.Start(result.Graph); err != nil {
+		if err := tui.Start(result.Graph, command); err != nil {
 			panic(err)
 		}
 		return

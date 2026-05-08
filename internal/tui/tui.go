@@ -25,15 +25,35 @@ var (
 	faintStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	paneStyle     = lipgloss.NewStyle().Padding(1, 2)
 
-	dirStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("33"))             // Blue
-	funcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))             // Green
-	glowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220")).Bold(true) // Yellow
+	// palette: jellybeans
+	dirStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("103"))            // blue
+	funcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("107"))            // green
+	glowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("222")).Bold(true) // yellow
 
-	// Heatmap Styles
+	/* adaptive (follows your terminal theme exactly)
+	dirStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))            // blue
+	funcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))            // green
+	glowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true) // yellow
+	*/
+
+	// heatmap styles
 	heatLow     = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))  // Soft Green
 	heatMed     = lipgloss.NewStyle().Foreground(lipgloss.Color("214")) // Warm Orange
 	heatHigh    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")) // Vivid Red
 	heatBlazing = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Underline(true)
+
+	// icon config
+	useNerdIcons = true
+
+	iconOpen   = "[-] "
+	iconClosed = "[+] "
+	iconFile   = ". "
+	iconFunc   = "f "
+
+	nerdOpen   = "\uf07c "
+	nerdClosed = "\uf07b "
+	nerdFile   = "\uf15b "
+	nerdFunc   = "\uf794 "
 )
 
 type Mode string
@@ -91,7 +111,7 @@ type TreeItem struct {
 	HasC  bool // has children
 }
 
-func NewModel(g *graph.Graph) Model {
+func NewModel(g *graph.Graph, projectRoot string) Model {
 	m := Model{
 		graph:      g,
 		expanded:   make(map[string]bool),
@@ -101,16 +121,20 @@ func NewModel(g *graph.Graph) Model {
 		hitCounts:  make(map[string]int),
 	}
 
-	// project path for status bar (last 3 dirs)
-	if wd, err := os.Getwd(); err == nil {
-		parts := strings.Split(wd, string(os.PathSeparator))
-		if len(parts) > 3 {
-			m.projectPath = ".../" + strings.Join(parts[len(parts)-3:], "/")
+	// Resolve the project name from the given root path
+	if projectRoot == "." || projectRoot == "" {
+		if wd, err := os.Getwd(); err == nil {
+			m.projectPath = filepath.Base(wd)
 		} else {
-			m.projectPath = wd
+			m.projectPath = "."
 		}
 	} else {
-		m.projectPath = "."
+		absPath, err := filepath.Abs(projectRoot)
+		if err == nil {
+			m.projectPath = filepath.Base(absPath)
+		} else {
+			m.projectPath = filepath.Base(projectRoot)
+		}
 	}
 
 	// Compute stats for status bar
@@ -593,17 +617,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.focus = 0
 			}
-		case "t":
-			if m.rightMode == ModeImpact {
+		case "t", "tab":
+			switch m.rightMode {
+			case ModeImpact:
 				m.rightMode = ModeTrace
-			} else if m.rightMode == ModeTrace {
+			case ModeTrace:
 				m.rightMode = ModeFlow
-			} else {
+			default:
 				m.rightMode = ModeImpact
 			}
 		case "enter":
 			if m.focus == 0 {
-				if m.items[m.selected].Type == graph.FunctionNode || m.items[m.selected].Type == graph.FileNode {
+				item := m.items[m.selected]
+				if item.Type == graph.DirectoryNode {
+					m.expanded[item.ID] = !m.expanded[item.ID]
+					m.refreshTree()
+				} else if item.Type == graph.FunctionNode || item.Type == graph.FileNode {
 					m.itemToOpen = &m.items[m.selected]
 					return m, tea.Quit
 				}
@@ -713,15 +742,15 @@ func (m Model) View() string {
 	}
 
 	// 1. Title bar
-	title := faintStyle.Render("cadr Navigator \u2013 ") + textStyle.Render("project: cadr")
+	title := faintStyle.Render("cadr") + faintStyle.Render(" | ") + textStyle.Render("project: "+m.projectPath)
 	topBar := lipgloss.NewStyle().
 		Width(m.width).
 		Border(lipgloss.NormalBorder(), false, false, true, false).
 		BorderForeground(lipgloss.Color("240")).
 		Render(title)
 
-	// Calculate remaining pane height
-	paneHeight := m.height - lipgloss.Height(topBar) - 3 // -3 for bottom bar
+	// calculate remaining pane height
+	paneHeight := m.height - lipgloss.Height(topBar) - 5
 	if paneHeight < 0 {
 		paneHeight = 0
 	}
@@ -755,23 +784,36 @@ func (m Model) View() string {
 		indentStr := strings.Repeat("  ", item.Depth)
 
 		var icon string
-		switch item.Type {
-		case graph.DirectoryNode:
-			if m.expanded[item.ID] {
-				icon = "🗁 "
-			} else {
-				icon = "🗀 "
+		if useNerdIcons {
+			switch item.Type {
+			case graph.DirectoryNode:
+				if m.expanded[item.ID] {
+					icon = nerdOpen
+				} else {
+					icon = nerdClosed
+				}
+			case graph.FileNode:
+				icon = nerdFile
+			case graph.FunctionNode:
+				icon = nerdFunc
+			default:
+				icon = "  "
 			}
-		case graph.FileNode:
-			if m.expanded[item.ID] {
-				icon = "🗌 "
-			} else {
-				icon = "🗋 "
+		} else {
+			switch item.Type {
+			case graph.DirectoryNode:
+				if m.expanded[item.ID] {
+					icon = iconOpen
+				} else {
+					icon = iconClosed
+				}
+			case graph.FileNode:
+				icon = iconFile
+			case graph.FunctionNode:
+				icon = iconFunc
+			default:
+				icon = "  "
 			}
-		case graph.FunctionNode:
-			icon = "ƒ "
-		default:
-			icon = "  "
 		}
 
 		var nameStyle lipgloss.Style
@@ -959,17 +1001,12 @@ func (m Model) View() string {
 	// Right side: trace status (if active)
 	statusRight := ""
 	if len(m.history) > 0 {
-		if m.isMonitoring {
-			if m.isLive {
-				statusRight = lipgloss.NewStyle().Foreground(lipgloss.Color("160")).Render("● REC")
-			} else {
-				statusRight = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Render("○ PAUSED")
-			}
-			if m.followLive {
-				statusRight += lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Render(" ⟳")
-			}
-			statusRight += " "
+		if m.isLive {
+			statusRight = lipgloss.NewStyle().Foreground(lipgloss.Color("82")).Bold(true).Render("LIVE")
+		} else {
+			statusRight = lipgloss.NewStyle().Foreground(lipgloss.Color("208")).Bold(true).Render("PAUSED")
 		}
+		statusRight += " "
 		statusRight += faintStyle.Render(fmt.Sprintf("Hit %d/%d", m.playhead+1, len(m.history)))
 	}
 
@@ -1063,8 +1100,8 @@ func openEditor(item *TreeItem) error {
 	return nil
 }
 
-func Start(g *graph.Graph) error {
-	m := NewModel(g)
+func Start(g *graph.Graph, projectRoot string) error {
+	m := NewModel(g, projectRoot)
 
 	// Passive Listening: Nav listens but doesn't error if port is busy (another cadr might be open)
 	var prog *tea.Program
@@ -1094,8 +1131,8 @@ func Start(g *graph.Graph) error {
 	}
 }
 
-func StartMonitor(g *graph.Graph, target string) error {
-	m := NewModel(g)
+func StartMonitor(g *graph.Graph, target string, projectRoot string) error {
+	m := NewModel(g, projectRoot)
 	m.isMonitoring = true
 	m.rightMode = ModeFlow
 

@@ -37,7 +37,7 @@ func DetectLanguage(cmd string) string {
 	cmdName = strings.TrimSuffix(cmdName, ".exe")
 
 	switch cmdName {
-	case "python", "python3", "py":
+	case "python", "python3", "py", "flask", "uvicorn", "pytest":
 		return "python"
 	case "node", "nodejs", "npm":
 		return "javascript"

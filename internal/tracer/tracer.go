@@ -98,10 +98,7 @@ func runCmd(fullCmd string, localOnly bool, onEvent func(Event)) error {
 	}
 
 	cmd.Stdin = os.Stdin
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
+	cmd.Stdout = os.Stdout
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return err
@@ -110,13 +107,6 @@ func runCmd(fullCmd string, localOnly bool, onEvent func(Event)) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			fmt.Println(scanner.Text())
-		}
-	}()
 
 	scanner := bufio.NewScanner(stderr)
 	for scanner.Scan() {

@@ -14,7 +14,8 @@
 <hr />
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/7d523ad0-d2a6-403e-a879-e9f3cd1344e0" width="850" autoplay loop muted></video>
+  <!-- <video src="https://github.com/user-attachments/assets/7d523ad0-d2a6-403e-a879-e9f3cd1344e0" width="850" autoplay loop muted></video> -->
+  <img src="./demo-vhs/cadr-demo.gif" width="850" alt="cadr demo" />
 </p>
 
 cadr is a terminal-native tool that integrates static analysis with dynamic execution tracing. It shows you a real-time map of your codebase's execution flow directly in the terminal. Explore complex application logic and legacy codebases without relying on manual logs, or "KT's" if you're using it at work :p
@@ -69,8 +70,8 @@ cadr operates in a dual-pane workflow. The left pane acts as the "body", while t
 
 **1. Start the cadr Daemon**:
 ```bash
-# Analyze the current directory and start listening for trace payloads
-cadr flow .
+# Analyze the current directory and start the TUI
+cadr .
 ```
 
 **2. Execute Your Application**:
@@ -90,7 +91,7 @@ cadr serve .
 
 ## Technical Features
 
-### Real-time Trace Visualization (`cadr flow`)
+### Real-time Trace Visualization (`cadr`)
 As the process executes, cadr maps the incoming trace payloads onto the pre-made static graph:
 - **Heatmap Visualization**: Nodes in the structure tree visually scale based on execution frequency (function hit counts).
 - **Chronological Playhead**: The right-hand pane records a linear sequence of execution events.

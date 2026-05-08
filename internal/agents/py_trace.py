@@ -4,6 +4,7 @@ import socket
 import threading
 import queue
 import os
+import time
 
 _sock = None
 _event_queue = queue.Queue()
